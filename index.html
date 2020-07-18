@@ -177,7 +177,7 @@
       
         
         <li class="menu-item menu-item-home">
-          <a href="/%20" rel="section">
+          <a href="/" rel="section">
             
               <i class="menu-item-icon fa fa-fw fa-home"></i> <br />
             
@@ -187,7 +187,7 @@
       
         
         <li class="menu-item menu-item-tags">
-          <a href="/tags/%20" rel="section">
+          <a href="/tags/" rel="section">
             
               <i class="menu-item-icon fa fa-fw fa-tags"></i> <br />
             
@@ -197,7 +197,7 @@
       
         
         <li class="menu-item menu-item-categories">
-          <a href="/categories/%20" rel="section">
+          <a href="/categories/" rel="section">
             
               <i class="menu-item-icon fa fa-fw fa-th"></i> <br />
             
@@ -207,7 +207,7 @@
       
         
         <li class="menu-item menu-item-archives">
-          <a href="/archives/%20" rel="section">
+          <a href="/archives/" rel="section">
             
               <i class="menu-item-icon fa fa-fw fa-archive"></i> <br />
             
@@ -340,55 +340,17 @@
 
       
         
-          
-            <h1 id="jekyll-or-hexo"><a href="#jekyll-or-hexo" class="headerlink" title="jekyll or hexo"></a>jekyll or hexo</h1><ul>
+          <h1 id="jekyll-or-hexo"><a href="#jekyll-or-hexo" class="headerlink" title="jekyll or hexo"></a>jekyll or hexo</h1><ul>
 <li>jekyll是Github Pages推荐使用的静态博客生成器，然而它需要的Ruby环境，Ruby相关依赖国内安装极其困难，特别是各种主题的依赖包，费了九牛二虎之力也没有搭建成功。</li>
 <li>hexo依赖环境安装简单，只需要node.js和git，主流NexT主题符合个人口味，还有详尽的中文文档，上手门槛较低。</li>
 </ul>
-<h1 id="搭建流程"><a href="#搭建流程" class="headerlink" title="搭建流程"></a>搭建流程</h1><p>hexo搭建博客时需要注意<strong>源文件</strong>和<strong>部署文件</strong>：</p>
-<ul>
-<li>源文件：包括hexo代码——themes(主题文件)、source(md博客文章)目录等；</li>
-<li>部署文件：hexo generate或hexo deploy之后生成的代码，在public目录中。</li>
-</ul>
-<p>可以使用2个不同的分支分别管理这两种文件，hexo分支作为工作分支存放源文件及文章，而master分支将存放hexo部署资源public的内容。</p>
-<h2 id="1-Github上创建远程仓库："><a href="#1-Github上创建远程仓库：" class="headerlink" title="1.Github上创建远程仓库："></a>1.Github上创建远程仓库：</h2><ul>
-<li>创建repo，命名为<em>usrname.github.io</em>，不要勾选初始化，否则后续步骤hexo init时会提示非空目录报错。</li>
-<li>设置Github Pages在master分支上构建。</li>
-</ul>
-<h2 id="2-拷贝远程仓库："><a href="#2-拷贝远程仓库：" class="headerlink" title="2.拷贝远程仓库："></a>2.拷贝远程仓库：</h2><p>git clone远程仓库到本地，此时是个空目录。创建工作分支hexo：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">checkout -b hexo</span><br></pre></td></tr></table></figure>
-
-<h2 id="3-初始化hexo："><a href="#3-初始化hexo：" class="headerlink" title="3.初始化hexo："></a>3.初始化hexo：</h2><p>在本地仓库目录下执行：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">npm install -g hexo-cli         <span class="comment"># 安装 hexo</span></span><br><span class="line">hexo init                       <span class="comment"># 初始化本地仓库文件夹</span></span><br><span class="line">npm install                     <span class="comment"># 安装依赖包</span></span><br><span class="line">npm install hexo-deployer-git   <span class="comment"># 安装 deploy，用于同步public/*到远程仓库</span></span><br></pre></td></tr></table></figure>
-
-<p>init成功后根目录下如下：</p>
-<ul>
-<li>_config.yml:站点的配置文件，可以配置大部分参数，要与themes里的_config.yml区分开；</li>
-<li>package.json:应用程序的信息；</li>
-<li>scaffolds：模板文件夹，新建文章文件时默认填充的内容；</li>
-<li>source：存放用户资源的文件夹，Markdown和HTML文件会被解析到public文件夹。</li>
-<li>themes：主题文件夹，hexo根据主题生成静态页面，NexT主题的配置文件在其目录下的_config.yml。  </li>
-</ul>
-<p>由于网络问题可能会出在下面WARN卡很久，耐心等待：</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">npm WARN deprecated hexo-bunyan@2.0.0: Please see https://github.com/hexojs/hexo-bunyan/issues/17</span><br><span class="line">npm WARN deprecated resolve-url@0.2.1: https://github.com/lydell/resolve-url<span class="comment">#deprecated</span></span><br><span class="line">npm WARN deprecated urix@0.1.0: Please see https://github.com/lydell/urix<span class="comment">#deprecated</span></span><br></pre></td></tr></table></figure>
-
-<h2 id="4-修改站点配置文件，根目录下-config-yml"><a href="#4-修改站点配置文件，根目录下-config-yml" class="headerlink" title="4.修改站点配置文件，根目录下_config.yml:"></a>4.修改站点配置文件，根目录下_config.yml:</h2><figure class="highlight yaml"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line"><span class="attr">themes:</span> <span class="string">next</span></span><br><span class="line"><span class="attr">deploy:</span></span><br><span class="line"><span class="attr">type:</span> <span class="string">git</span>           <span class="comment"># 类型</span></span><br><span class="line"><span class="attr">repo:</span> <span class="string">ssh://git@github.com/Tipan/tipan.github.io.git</span>      <span class="comment"># Repository地址，注意github.com后“:”需要改成“/”</span></span><br><span class="line"><span class="attr">branch:</span> <span class="string">master</span>      <span class="comment"># 分支名称设置为 master, hexo d时会部署到该分支</span></span><br></pre></td></tr></table></figure>
-
-<p>下载<a href="https://github.com/iissnan/hexo-theme-next/releases" target="_blank" rel="noopener"><em>NexT</em></a>主题解压到themes目录下，并重命名为next。</p>
-<h2 id="5-提交源文件"><a href="#5-提交源文件" class="headerlink" title="5.提交源文件"></a>5.提交源文件</h2><p>在<em>source/_post</em>下修改文章后，将修改提交到远程仓库的hexo分支</p>
-<figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">git add .</span><br><span class="line">git commit -m <span class="string">"msg"</span></span><br><span class="line">git push origin hexo</span><br></pre></td></tr></table></figure>
-
-<h2 id="6-生成静态文件并部署到master分支上："><a href="#6-生成静态文件并部署到master分支上：" class="headerlink" title="6.生成静态文件并部署到master分支上："></a>6.生成静态文件并部署到master分支上：</h2><figure class="highlight bash"><table><tr><td class="gutter"><pre><span class="line">1</span><br></pre></td><td class="code"><pre><span class="line">hexo deploye   <span class="comment"># 或者简写hexo d</span></span><br></pre></td></tr></table></figure>
-<p>打开<em>username.github.io</em>地址即可看见</p>
-<h3 id="参考链接"><a href="#参考链接" class="headerlink" title="参考链接"></a>参考链接</h3><ul>
-<li><a href="https://docs.github.com/en/github/working-with-github-pages/getting-started-with-github-pages" target="_blank" rel="noopener">Getting started with GitHub Pages</a></li>
-<li><a href="https://hexo.io/zh-cn/docs/" target="_blank" rel="noopener">hexo文档</a></li>
-<li><a href="http://theme-next.iissnan.com/getting-started.html" target="_blank" rel="noopener">NexT文档</a></li>
-<li><a href="https://blog.csdn.net/u011475210/article/details/79023429#next%E8%BF%9B%E9%98%B6" target="_blank" rel="noopener">我的个人博客之旅：从jekyll到hexo</a></li>
-<li><a href="https://tophat.top/posts/2ca3dccb.html" target="_blank" rel="noopener">通过git来维护hexo静态站点远程仓库的流程</a></li>
-</ul>
-
-          
+          <!--noindex-->
+          <div class="post-button text-center">
+            <a class="btn" href="/2020/07/18/blogstart/blogstart.html#more" rel="contents">
+              阅读全文 &raquo;
+            </a>
+          </div>
+          <!--/noindex-->
         
       
     </div>
@@ -470,7 +432,7 @@
             
               <div class="site-state-item site-state-posts">
               
-                <a href="/archives/%20%7C%7C%20archive">
+                <a href="/archives/%7C%7C%20archive">
               
                   <span class="site-state-item-count">1</span>
                   <span class="site-state-item-name">日志</span>
