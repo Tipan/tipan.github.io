@@ -227,7 +227,7 @@ auto_excerpt:
 post_meta:
   item_text: true
   created_at: true
-  updated_at: false
+  updated_at: true
   categories: true
 
 # Post wordcount display settings
@@ -817,4 +817,3 @@ images: images
 version: 5.1.4
 
 since: 2020
-dusplay_updated: true
