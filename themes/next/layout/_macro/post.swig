@@ -92,6 +92,9 @@
           </span>
           {%if post.updated and post.updated > post.date%}
             <span class="post-updated">
+              <span class="post-meta-item-icon">
+                <i class="fa fa-calendar-o"></i>
+              </span>
               &nbsp; | &nbsp; {{ __('post.updated') }}
               <time itemprop="dateUpdated" datetime="{{ moment(post.updated).format() }}" content="{{ date(post.updated, config.date_format) }}">
                 {{ date(post.updated, config.date_format) }}
