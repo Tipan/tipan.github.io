@@ -87,7 +87,7 @@ hexo deploye   # 或者简写hexo d
 ```
 打开*username.github.io*地址即可看见
 
-### 参考链接
+# 参考链接
 * [Getting started with GitHub Pages](https://docs.github.com/en/github/working-with-github-pages/getting-started-with-github-pages)
 * [hexo文档](https://hexo.io/zh-cn/docs/)
 * [NexT文档](http://theme-next.iissnan.com/getting-started.html)
