@@ -83,24 +83,13 @@
                 <i class="fa fa-calendar-check-o"></i>
               </span>
               {% if theme.post_meta.item_text %}
-                <span class="post-meta-item-text">{{ __('post.modified') }}&#58;</span>
+                <span class="post-meta-item-text">{{ __('post.modified') }};</span>
               {% endif %}
               <time title="{{ __('post.modified') }}" itemprop="dateModified" datetime="{{ moment(post.updated).format() }}">
                 {{ date(post.updated, config.date_format) }}
               </time>
             {% endif %}
           </span>
-          {%if post.updated and post.updated > post.date%}
-            <span class="post-updated">
-              <span class="post-meta-item-icon">
-                <i class="fa fa-calendar-o"></i>
-              </span>
-              &nbsp; | &nbsp; {{ __('post.updated') }}
-              <time itemprop="dateUpdated" datetime="{{ moment(post.updated).format() }}" content="{{ date(post.updated, config.date_format) }}">
-                {{ date(post.updated, config.date_format) }}
-              </time>
-            </span>
-          {% endif %}
 
           {% if post.categories and post.categories.length and theme.post_meta.categories %}
             <span class="post-category" >
