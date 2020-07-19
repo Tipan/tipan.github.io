@@ -1,0 +1,332 @@
+From 421c31d2b1fc931c5439a2fff361ef2d34a44a75 Mon Sep 17 00:00:00 2001
+From: Tipan_xzh <Tipan_xzh@163.com>
+Date: Sun, 19 Jul 2020 20:05:49 +0800
+Subject: [PATCH] shm modify
+
+---
+ src/networking.c      |  50 ++++++++++++++-
+ src/redis-benchmark.c | 144 +++++++++++++++++++++++++++++++++++++++++-
+ src/server.h          |   3 +
+ 3 files changed, 192 insertions(+), 5 deletions(-)
+
+diff --git a/src/networking.c b/src/networking.c
+index 77b9a6f..405ef19 100644
+--- a/src/networking.c
++++ b/src/networking.c
+@@ -33,6 +33,10 @@
+ #include <sys/uio.h>
+ #include <math.h>
+ #include <ctype.h>
++#include <sys/mman.h>
++#include <sys/stat.h>
++#include <fcntl.h>
++#include <errno.h>
+ 
+ static void setProtocolError(const char *errstr, client *c);
+ int postponeClientRead(client *c);
+@@ -85,6 +89,19 @@ void linkClient(client *c) {
+     raxInsert(server.clients_index,(unsigned char*)&id,sizeof(id),c,NULL);
+ }
+ 
++int readReq(struct aeEventLoop *eventLoop, long long id, void *clientData) {
++    UNUSED(eventLoop);
++    UNUSED(id);
++    client *c = clientData;
++
++    if (c->shbuf[-1] & 8) {
++        c->querybuf = sdscpy(c->querybuf, c->shbuf);
++        c->shbuf[-1] &= ~8;
++        processInputBuffer(c);
++    }
++    return 0;
++}
++
+ client *createClient(connection *conn) {
+     client *c = zmalloc(sizeof(client));
+ 
+@@ -111,6 +128,28 @@ client *createClient(connection *conn) {
+     c->qb_pos = 0;
+     c->querybuf = sdsempty();
+     c->pending_querybuf = sdsempty();
++    /* mmap shared buf */
++    int fd = shm_open("ivshmem", O_CREAT | O_RDWR, S_IRWXU);
++    if (fd == -1) {
++        fprintf(stderr, "Failed to shm_open :%d\n", errno);
++    }
++
++    if (ftruncate(fd, 1024 * 1024) == -1) {
++       fprintf(stderr, "ftruncate failed\n");
++    }
++    c->replybuf = (char *)mmap(NULL, 16 * 1024, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0) + 1 + sizeof(int);
++    if (c->replybuf == MAP_FAILED) {
++       fprintf(stderr, "mmap replybuf failed");
++    }
++    c->shbuf = (char *)mmap(NULL, 16 * 1024, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 32 * 1024) + sizeof(struct sdshdr16);
++    if (c->shbuf == MAP_FAILED) {
++       fprintf(stderr, "mmap shbuf failed");
++    }
++    memset(c->replybuf - 1, 0, 1024);
++    if (conn) {
++        c->reqid = aeCreateTimeEvent(server.el, 1, readReq, c, NULL);
++    }
++
+     c->querybuf_peak = 0;
+     c->reqtype = 0;
+     c->argc = 0;
+@@ -1101,7 +1140,7 @@ void freeClient(client *c) {
+         freeClientAsync(c);
+         return;
+     }
+-
++    aeDeleteTimeEvent(server.el, c->reqid);
+     /* For connected clients, call the disconnection event of modules hooks. */
+     if (c->conn) {
+         moduleFireServerEvent(REDISMODULE_EVENT_CLIENT_CHANGE,
+@@ -1280,8 +1319,13 @@ int writeToClient(client *c, int handler_installed) {
+ 
+     while(clientHasPendingReplies(c)) {
+         if (c->bufpos > 0) {
+-            nwritten = connWrite(c->conn,c->buf+c->sentlen,c->bufpos-c->sentlen);
+-            if (nwritten <= 0) break;
++            //nwritten = connWrite(c->conn,c->buf+c->sentlen,c->bufpos-c->sentlen);
++            memcpy(c->replybuf, c->buf, strlen(c->buf));
++            c->replybuf[strlen(c->buf)] = 0;
++            c->replybuf[-1] = 1;
++            //if (nwritten <= 0) break;
++            nwritten = c->bufpos;
++            c->replybuf[-1 - sizeof(int)] = c->bufpos;
+             c->sentlen += nwritten;
+             totwritten += nwritten;
+ 
+diff --git a/src/redis-benchmark.c b/src/redis-benchmark.c
+index 38d4ca5..ab4eeef 100644
+--- a/src/redis-benchmark.c
++++ b/src/redis-benchmark.c
+@@ -41,6 +41,9 @@
+ #include <assert.h>
+ #include <math.h>
+ #include <pthread.h>
++#include <sys/mman.h>
++#include <sys/stat.h>
++#include <fcntl.h>
+ 
+ #include <sds.h> /* Use hiredis sds. */
+ #include "ae.h"
+@@ -119,6 +122,9 @@ static struct config {
+ typedef struct _client {
+     redisContext *context;
+     sds obuf;
++    sds shbuf;
++    char *replybuf;
++    long long replyid;
+     char **randptr;         /* Pointers to :rand: strings inside the command buf */
+     size_t randlen;         /* Number of pointers in client->randptr */
+     size_t randfree;        /* Number of unused pointers in client->randptr */
+@@ -317,6 +323,7 @@ static void freeClient(client c) {
+     listNode *ln;
+     aeDeleteFileEvent(el,c->context->fd,AE_WRITABLE);
+     aeDeleteFileEvent(el,c->context->fd,AE_READABLE);
++    aeDeleteTimeEvent(el, c->replyid);
+     if (c->thread_id >= 0) {
+         int requests_finished = 0;
+         atomicGet(config.requests_finished, requests_finished);
+@@ -347,11 +354,16 @@ static void freeAllClients(void) {
+     }
+ }
+ 
++#define SHBUF_READABLE 8
++int readReply(struct aeEventLoop *eventLoop, long long id, void *clientData);
++
+ static void resetClient(client c) {
+     aeEventLoop *el = CLIENT_GET_EVENTLOOP(c);
+     aeDeleteFileEvent(el,c->context->fd,AE_WRITABLE);
+     aeDeleteFileEvent(el,c->context->fd,AE_READABLE);
+-    aeCreateFileEvent(el,c->context->fd,AE_WRITABLE,writeHandler,c);
++    //aeCreateFileEvent(el,c->context->fd,AE_WRITABLE,writeHandler,c);
++    c->shbuf[-1] |= SHBUF_READABLE;
++    c->replyid = aeCreateTimeEvent(el, 0, readReply, c, NULL);
+     c->written = 0;
+     c->pending = config.pipeline;
+ }
+@@ -561,6 +573,108 @@ static void writeHandler(aeEventLoop *el, int fd, void *privdata, int mask) {
+     }
+ }
+ 
++int readReply(struct aeEventLoop *eventLoop, long long id, void *clientData) {
++    UNUSED(eventLoop);
++    UNUSED(id);
++    client c = clientData;
++    unsigned char *flags = &c->replybuf[-1];
++    void *reply = NULL;
++
++    if (c->latency < 0)
++        c->latency = ustime()-(c->start);
++    if (*flags == 1) {
++        *flags = 0;
++        if (redisReaderFeed(c->context->reader, c->replybuf, c->replybuf[-1 - sizeof(int)]) != REDIS_OK) {
++            fprintf(stderr,"Error: %s\n",c->context->errstr);
++            exit(1);
++        } else {
++            while(c->pending) {
++                if (redisGetReply(c->context,&reply) != REDIS_OK) {
++                    fprintf(stderr,"Error: %s\n",c->context->errstr);
++                    exit(1);
++                }
++                if (reply != NULL) {
++                    if (reply == (void*)REDIS_REPLY_ERROR) {
++                        fprintf(stderr,"Unexpected error reply, exiting...\n");
++                        exit(1);
++                    }
++                    redisReply *r = reply;
++                    int is_err = (r->type == REDIS_REPLY_ERROR);
++
++                    if (is_err && config.showerrors) {
++                        /* TODO: static lasterr_time not thread-safe */
++                        static time_t lasterr_time = 0;
++                        time_t now = time(NULL);
++                        if (lasterr_time != now) {
++                            lasterr_time = now;
++                            if (c->cluster_node) {
++                                printf("Error from server %s:%d: %s\n",
++                                       c->cluster_node->ip,
++                                       c->cluster_node->port,
++                                       r->str);
++                            } else printf("Error from server: %s\n", r->str);
++                        }
++                    }
++
++                    /* Try to update slots configuration if reply error is
++                     * MOVED/ASK/CLUSTERDOWN and the key(s) used by the command
++                     * contain(s) the slot hash tag. */
++                    if (is_err && c->cluster_node && c->staglen) {
++                        int fetch_slots = 0, do_wait = 0;
++                        if (!strncmp(r->str,"MOVED",5) || !strncmp(r->str,"ASK",3))
++                            fetch_slots = 1;
++                        else if (!strncmp(r->str,"CLUSTERDOWN",11)) {
++                            /* Usually the cluster is able to recover itself after
++                             * a CLUSTERDOWN error, so try to sleep one second
++                             * before requesting the new configuration. */
++                            fetch_slots = 1;
++                            do_wait = 1;
++                            printf("Error from server %s:%d: %s\n",
++                                   c->cluster_node->ip,
++                                   c->cluster_node->port,
++                                   r->str);
++                        }
++                        if (do_wait) sleep(1);
++                        if (fetch_slots && !fetchClusterSlotsConfiguration(c))
++                            exit(1);
++                    }
++
++                    freeReplyObject(reply);
++                    /* This is an OK for prefix commands such as auth and select.*/
++                    if (c->prefix_pending > 0) {
++                        c->prefix_pending--;
++                        c->pending--;
++                        /* Discard prefix commands on first response.*/
++                        if (c->prefixlen > 0) {
++                            size_t j;
++                            sdsrange(c->obuf, c->prefixlen, -1);
++                            /* We also need to fix the pointers to the strings
++                            * we need to randomize. */
++                            for (j = 0; j < c->randlen; j++)
++                                c->randptr[j] -= c->prefixlen;
++                            c->prefixlen = 0;
++                        }
++                        continue;
++                    }
++                    int requests_finished = 0;
++                    atomicGetIncr(config.requests_finished, requests_finished, 1);
++                    if (requests_finished < config.requests)
++                        config.latency[requests_finished] = c->latency + 1000;
++                    c->pending--;
++                    if (c->pending == 0) {
++                        clientDone(c);
++                        break;
++                    }
++                } else {
++                    break;
++                }
++            }
++        }
++        aeDeleteTimeEvent(config.el, c->replyid);
++    }
++    return 0;
++}
++
+ /* Create a benchmark client, configured to send the command passed as 'cmd' of
+  * 'len' bytes.
+  *
+@@ -590,6 +704,15 @@ static client createClient(char *cmd, size_t len, client from, int thread_id) {
+     const char *ip = NULL;
+     int port = 0;
+     c->cluster_node = NULL;
++
++    int fd = shm_open("ivshmem", O_CREAT | O_RDWR, S_IRWXU);
++    if (fd == -1) {
++        fprintf(stderr, "Failed to shm_open ");
++    }
++
++    if (ftruncate(fd, 1024 * 1024) == -1) {
++       fprintf(stderr, "ftruncate failed");
++    }
+     if (config.hostsocket == NULL || is_cluster_client) {
+         if (!is_cluster_client) {
+             ip = config.hostip;
+@@ -707,6 +830,22 @@ static client createClient(char *cmd, size_t len, client from, int thread_id) {
+             }
+         }
+     }
++
++    /* reply buf mmap */
++    c->replybuf = (char *)mmap(NULL, 16 * 1024, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0) + 1 + sizeof(int);
++    if (c->replybuf == MAP_FAILED) {
++       fprintf(stderr, "mmap replybuf failed");
++    }
++    /* shbuf mmap */
++    c->shbuf = (char *)mmap(NULL, 16 * 1024, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 32 * 1024) + sizeof(struct sdshdr16);
++    if (c->shbuf == MAP_FAILED) {
++       fprintf(stderr, "mmap shbuf failed");
++    }
++    SDS_HDR(16, c->shbuf)->alloc = 16 * 1024;
++    SDS_HDR(16, c->shbuf)->flags = SDS_TYPE_16;
++    c->shbuf = sdscpy(c->shbuf, c->obuf);
++    SDS_HDR(16, c->shbuf)->flags |= SHBUF_READABLE;
++
+     /* If cluster mode is enabled, set slot hashtags pointers. */
+     if (config.cluster_mode) {
+         if (from) {
+@@ -744,7 +883,8 @@ static client createClient(char *cmd, size_t len, client from, int thread_id) {
+         el = thread->el;
+     }
+     if (config.idlemode == 0)
+-        aeCreateFileEvent(el,c->context->fd,AE_WRITABLE,writeHandler,c);
++        //aeCreateFileEvent(el,c->context->fd,AE_WRITABLE,writeHandler,c);
++        c->replyid = aeCreateTimeEvent(el, 0, readReply, c, NULL);
+     listAddNodeTail(config.clients,c);
+     atomicIncr(config.liveclients, 1);
+     atomicGet(config.slots_last_update, c->slots_last_update);
+diff --git a/src/server.h b/src/server.h
+index a085852..3b9d27a 100644
+--- a/src/server.h
++++ b/src/server.h
+@@ -772,6 +772,8 @@ typedef struct client {
+     redisDb *db;            /* Pointer to currently SELECTed DB. */
+     robj *name;             /* As set by CLIENT SETNAME. */
+     sds querybuf;           /* Buffer we use to accumulate client queries. */
++    sds shbuf;
++    long long reqid;
+     size_t qb_pos;          /* The position we have read in querybuf. */
+     sds pending_querybuf;   /* If this client is flagged as master, this buffer
+                                represents the yet not applied portion of the
+@@ -849,6 +851,7 @@ typedef struct client {
+     /* Response buffer */
+     int bufpos;
+     char buf[PROTO_REPLY_CHUNK_BYTES];
++    char *replybuf;
+ } client;
+ 
+ struct saveparam {
+-- 
+2.18.0.windows.1
+
